@@ -126,7 +126,16 @@ button{font:inherit;cursor:pointer}
 .pagina.pdia{display:flex;flex-direction:column}
 
 /* tareas de los días laborables a doble columna sobre las líneas */
-.pagina > .dia .tareas{display:grid;grid-template-columns:1fr 1fr;column-gap:14px;align-content:start}
+.pagina > .dia .tareas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:14px;align-content:start}
+
+/* casillas llenas: títulos a una línea, y si no basta, letra menor */
+.tarea{min-width:0}
+.tareas.apretada .tarea{margin:1px 0}
+.tareas.apretada .txt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tareas.muy-apretada .tarea{font-size:12.5px;padding-top:0;padding-bottom:0;margin:0}
+.tareas.muy-apretada .tarea .chk{width:12px;height:12px;margin-top:2px}
+.franja .tareas.apretada{flex-wrap:nowrap}
+.franja .tareas.apretada .tarea{flex:1 1 0}
 
 /* paso de página en 3D: una hoja gira sobre las anillas */
 .libro{perspective:2600px}
@@ -463,7 +472,7 @@ function chip(t, conHora){
   li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '');
   li.draggable = true;
   li.dataset.id = t.id;
-  if (t.por) li.title = 'Apuntada por ' + t.por;
+  li.title = t.texto + (t.por ? ' · apuntada por ' + t.por : '');
   li.innerHTML = '<button class="chk" title="Hecha"></button><span class="txt"></span>';
   const txt = li.querySelector('.txt');
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
@@ -499,11 +508,23 @@ function pintar(direccion){
   $('#libroDia').hidden = modo !== 'dia';
   if (modo === 'semana') pintarSemana(); else pintarDia();
   llenar($('#notas .tareas'), tareasDe('').sort(porOrden), false);
+  libro.querySelectorAll('.tareas').forEach(ajustar);
   if (!direccion) return;
   if (viejo){ pasarHoja(libro, viejo, direccion); return; }
   libro.classList.remove('adelante','atras'); void libro.offsetWidth;
   libro.classList.add(direccion > 0 ? 'adelante' : 'atras');
 }
+
+// Si una casilla no cabe, las tareas pasan a una línea con puntos suspensivos y, si aún no cabe, a letra más pequeña
+function ajustar(ul){
+  ul.classList.remove('apretada', 'muy-apretada');
+  const desborda = () => ul.scrollHeight > ul.clientHeight + 1;
+  if (!ul.clientHeight || !desborda()) return;
+  ul.classList.add('apretada');
+  if (desborda()) ul.classList.add('muy-apretada');
+}
+let reajuste = null;
+addEventListener('resize', () => { clearTimeout(reajuste); reajuste = setTimeout(() => document.querySelectorAll('.tareas').forEach(ajustar), 150); });
 
 /* ---------- paso de página ---------- */
 // Copia muda de las dos páginas: sin ids ni zonas, para que nada la confunda con las de verdad
