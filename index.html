@@ -239,9 +239,23 @@ button{font:inherit;cursor:pointer}
 
 <div class="pie">
   <span>Clic en un día para ver su horario · doble clic en un hueco para apuntar · arrastra para mover</span>
+  <button id="nube">☁ Conectar</button>
   <button id="exportar">Guardar copia</button>
   <button id="importar">Cargar copia</button>
   <input type="file" id="fichero" accept="application/json" hidden>
+</div>
+
+<div class="velo" id="veloToken">
+  <div class="editor">
+    <h2>Conectar la agenda</h2>
+    <p style="margin:0 0 8px;font-size:14px;color:var(--tenue)">Pega el token de GitHub con acceso al repo <b>agenda-datos</b>. Se guarda solo en este navegador.</p>
+    <input type="password" id="tokTexto" style="width:100%;font:inherit;padding:4px 8px;border:1px solid var(--papel-sombra);border-radius:5px" placeholder="github_pat_…">
+    <p id="tokError" style="color:var(--rojo);font-size:14px;min-height:1em;margin:6px 0"></p>
+    <div class="acciones">
+      <button class="cancelar" id="tokCancelar">Cancelar</button>
+      <button class="guardar" id="tokGuardar">Conectar</button>
+    </div>
+  </div>
 </div>
 
 <div class="velo" id="velo">
@@ -293,17 +307,79 @@ function semanaISO(d){
   return Math.ceil(((x - Date.UTC(x.getUTCFullYear(),0,1)) / 864e5 + 1) / 7);
 }
 
+const completar = s => { s.rutina = s.rutina || {}; s.borradas = s.borradas || []; return s; };
 function cargar(){
   try {
     const s = JSON.parse(localStorage.getItem(CLAVE));
-    if (s && Array.isArray(s.tareas)){ s.rutina = s.rutina || {}; return s; }
+    if (s && Array.isArray(s.tareas)) return completar(s);
   } catch(e){}
-  return {
-    tareas:[],
-    rutina:{},
-  };
+  return {tareas:[], rutina:{}, borradas:[]};
 }
-function guardar(){ try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch(e){} }
+function guardarLocal(){ try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch(e){} }
+function guardar(){ guardarLocal(); pendiente = true; clearTimeout(subidaProgramada); subidaProgramada = setTimeout(sincronizar, 700); }
+const tocar = t => { t.mod = Date.now(); };
+
+/* ---------- nube: datos.json del repo privado lucasague/agenda-datos ---------- */
+const API = 'https://api.github.com/repos/lucasague/agenda-datos/contents/datos.json';
+const CLAVE_TOKEN = 'agenda-token';
+let token = ''; try { token = localStorage.getItem(CLAVE_TOKEN) || ''; } catch(e){}
+let pendiente = false, subidaProgramada = null, sincronizando = false;
+const rutinaPendiente = new Set();
+
+const b64aTexto = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, '')), c => c.charCodeAt(0)));
+function textoAb64(s){
+  const bytes = new TextEncoder().encode(s); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+const cabeceras = () => ({Authorization:`Bearer ${token}`, Accept:'application/vnd.github+json'});
+
+async function leerNube(){
+  const r = await fetch(API + '?t=' + Date.now(), {headers:cabeceras(), cache:'no-store'});
+  if (!r.ok) throw new Error('lectura ' + r.status);
+  const j = await r.json();
+  return {datos:completar(JSON.parse(b64aTexto(j.content))), sha:j.sha};
+}
+function mezclar(nube, local){
+  const borradas = [...new Set([...nube.borradas, ...local.borradas])];
+  const porId = new Map(nube.tareas.map(t => [t.id, t]));
+  for (const t of local.tareas){
+    const n = porId.get(t.id);
+    if (!n || (t.mod || 0) > (n.mod || 0)) porId.set(t.id, t);
+  }
+  const rutina = JSON.parse(JSON.stringify(nube.rutina));
+  for (const k of rutinaPendiente){
+    const [f, id] = k.split('|');
+    rutina[f] = rutina[f] || {};
+    rutina[f][id] = !!(local.rutina[f] && local.rutina[f][id]);
+  }
+  return {tareas:[...porId.values()].filter(t => !borradas.includes(t.id)), rutina, borradas};
+}
+async function sincronizar(){
+  // Con el editor abierto o arrastrando no se toca `estado`: la tarea en mano quedaría huérfana
+  if (!token || sincronizando || $('#velo').classList.contains('abierto') || arrastrando) return;
+  sincronizando = true; avisoNube('…');
+  try {
+    for (let intento = 0; intento < 4; intento++){
+      const {datos, sha} = await leerNube();
+      estado = mezclar(datos, estado);
+      guardarLocal();
+      if (!pendiente) break;
+      const r = await fetch(API, {method:'PUT', headers:cabeceras(), body:JSON.stringify({
+        message:'agenda: cambios desde la web', sha, content:textoAb64(JSON.stringify(estado, null, 1))})});
+      if (r.ok){ pendiente = false; rutinaPendiente.clear(); break; }
+      if (r.status !== 409 && r.status !== 422) throw new Error('escritura ' + r.status);
+    }
+    avisoNube(pendiente ? 'error' : 'ok');
+    pintar();
+  } catch(err){
+    console.error(err); avisoNube('error');
+  } finally { sincronizando = false; }
+}
+function avisoNube(s){
+  const el = $('#nube');
+  el.textContent = !token ? '☁ Conectar' : s === 'ok' ? '☁ Al día' : s === 'error' ? '☁ Sin conexión (reintentar)' : '☁ Sincronizando…';
+}
 
 let estado = cargar();
 let modo = 'semana';
@@ -337,6 +413,7 @@ function chip(t, conHora){
   li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '');
   li.draggable = true;
   li.dataset.id = t.id;
+  if (t.por) li.title = 'Apuntada por ' + t.por;
   li.innerHTML = '<button class="chk" title="Hecha"></button><span class="txt"></span>';
   const txt = li.querySelector('.txt');
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
@@ -433,6 +510,7 @@ function alternarRutina(el){
   const f = el.dataset.fecha, id = el.dataset.rut;
   estado.rutina[f] = estado.rutina[f] || {};
   estado.rutina[f][id] = !estado.rutina[f][id];
+  rutinaPendiente.add(f + '|' + id);
   guardar(); pintar();
 }
 
@@ -442,7 +520,7 @@ document.addEventListener('click', e => {
   const chk = e.target.closest('.chk');
   if (chk){
     const t = estado.tareas.find(x => x.id === chk.closest('.tarea').dataset.id);
-    t.hecha = !t.hecha; guardar(); pintar(); return;
+    t.hecha = !t.hecha; tocar(t); guardar(); pintar(); return;
   }
   const li = e.target.closest('.tarea');
   if (li){ abrirEditor(estado.tareas.find(x => x.id === li.dataset.id)); return; }
@@ -491,16 +569,21 @@ function guardarEditor(){
   const texto = $('#edTexto').value.trim();
   const hora = $('#edHora').value || null;
   if (!texto){ cerrarEditor(); return; }
-  if (editando){ editando.texto = texto; editando.tema = temaSel; editando.hora = hora; }
+  if (editando){ editando.texto = texto; editando.tema = temaSel; editando.hora = hora; tocar(editando); }
   else {
-    estado.tareas.push({id:uid(), texto, hora, tema:temaSel, fecha:fechaNueva || null, hecha:false, orden:tareasDe(fechaNueva).length});
+    estado.tareas.push({id:uid(), texto, hora, tema:temaSel, fecha:fechaNueva || null, hecha:false,
+      orden:tareasDe(fechaNueva).length, por:'Lucas', mod:Date.now()});
   }
   ultimoTema = temaSel;
   guardar(); cerrarEditor(); pintar();
 }
 $('#edGuardar').onclick = guardarEditor;
 $('#edCancelar').onclick = cerrarEditor;
-$('#edBorrar').onclick = () => { estado.tareas = estado.tareas.filter(t => t !== editando); guardar(); cerrarEditor(); pintar(); };
+$('#edBorrar').onclick = () => {
+  estado.tareas = estado.tareas.filter(t => t !== editando);
+  estado.borradas.push(editando.id);
+  guardar(); cerrarEditor(); pintar();
+};
 $('#velo').onclick = e => { if (e.target.id === 'velo') cerrarEditor(); };
 
 /* ---------- arrastrar ---------- */
@@ -571,7 +654,7 @@ document.addEventListener('drop', e => {
       t.fecha = fecha; t.hora = mismaHora ? t.hora : h + ':00';
     }
   }
-  ids.forEach((id, n) => { estado.tareas.find(x => x.id === id).orden = n; });
+  ids.forEach((id, n) => { const x = estado.tareas.find(y => y.id === id); x.orden = n; tocar(x); });
   guardar(); quitarMarca(); pintar();
 });
 
@@ -601,12 +684,31 @@ $('#fichero').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const s = JSON.parse(await f.text());
-    if (Array.isArray(s.tareas)){ s.rutina = s.rutina || {}; estado = s; guardar(); pintar(); }
+    if (Array.isArray(s.tareas)){ estado = completar(s); estado.tareas.forEach(tocar); guardar(); pintar(); }
   } catch(err){ console.error('Copia no válida', err); }
   e.target.value = '';
 };
 
+/* ---------- conexión con la nube ---------- */
+$('#nube').onclick = () => {
+  if (token){ sincronizar(); return; }
+  $('#veloToken').classList.add('abierto'); setTimeout(() => $('#tokTexto').focus(), 0);
+};
+$('#tokCancelar').onclick = () => $('#veloToken').classList.remove('abierto');
+$('#tokGuardar').onclick = async () => {
+  token = $('#tokTexto').value.trim();
+  try { await leerNube(); } catch(e){ token = ''; $('#tokError').textContent = 'No me deja leer la agenda con ese token.'; return; }
+  try { localStorage.setItem(CLAVE_TOKEN, token); } catch(e){}
+  $('#veloToken').classList.remove('abierto');
+  pendiente = estado.tareas.length > 0;
+  sincronizar();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
+setInterval(sincronizar, 60000);
+
 pintar();
+avisoNube();
+sincronizar();
 </script>
 </body>
 </html>
