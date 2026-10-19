@@ -316,12 +316,21 @@ const TEMAS = [
   {id:'personal', nombre:'Personal'},
   {id:'rojo', nombre:'Importante'},
 ];
-// Lo fijo de cada día; lo marcable se marca y tacha por fecha
+// Lo fijo, en la cabecera de cada día; se marca y tacha por fecha. `dias`: 0 = lunes … 6 = domingo (sin `dias`, todos)
 const RUTINA = [
-  {id:'despertar',     hora:'03:45', etiqueta:'3:45', texto:'Despertador',          corto:'Despertador',   marcable:true},
-  {id:'contemplativa', hora:'04:00', etiqueta:'4–5',  texto:'Hora contemplativa',   corto:'Contemplativa', marcable:true},
+  {id:'despertar',     hora:'03:45', texto:'Despertador'},
+  {id:'contemplativa', hora:'04:00', texto:'Hora contemplativa', corto:'Contemplativa'},
+  {id:'oracion',       hora:'06:37', texto:'Oración de la mañana', corto:'Oración', dias:[0,1,2,3,4]},
+  {id:'taekwondo',     hora:'09:00', texto:'Taekwondo', dias:[4]},
+  {id:'plan-gloria',   hora:'10:30', texto:'Plan Gloria', dias:[4]},
+  {id:'recoger',       hora:'11:45', texto:'Recoger a los niños', corto:'Recoger niños', dias:[0,1,3]},
+  {id:'intercambio',   hora:'13:00', texto:'Intercambio familiar', corto:'Intercambio', dias:[2]},
+  {id:'recoger-x',     hora:'13:30', texto:'Recoger a los niños', corto:'Recoger niños', dias:[2]},
+  {id:'plan-diego',    hora:'14:00', texto:'Plan Diego', dias:[1]},
+  {id:'plan-jose',     hora:'14:00', texto:'Plan José', dias:[3]},
 ];
-const rutinaDe = fecha => RUTINA.filter(r => !r.laborable || diaSemana(deIso(fecha)) < 5);
+RUTINA.forEach(r => { r.etiqueta = (+r.hora.slice(0,2)) + ':' + r.hora.slice(3); r.corto = r.corto || r.texto; r.marcable = true; });
+const rutinaDe = fecha => RUTINA.filter(r => !r.dias || r.dias.includes(diaSemana(deIso(fecha))));
 const HORAS_IZQ = [3,4,5,6,7,8,9,10,11];
 const HORAS_DER = [12,13,14,15,16,17,18,19,20];
 const DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
@@ -481,7 +490,7 @@ function chip(t, conHora){
 }
 function chipRutina(fecha, r){
   const li = document.createElement('li');
-  const hora = `<span class="hora">${r.id === 'contemplativa' ? '4:00–5:00' : r.etiqueta}</span>`;
+  const hora = `<span class="hora">${r.etiqueta}</span>`;
   if (!r.marcable){
     li.className = 'tarea t-rutina fija';
     li.innerHTML = `<span class="txt">${hora}${r.texto}</span>`;
