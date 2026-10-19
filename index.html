@@ -128,7 +128,7 @@ button{font:inherit;cursor:pointer}
 .pagina.pdia{display:flex;flex-direction:column}
 
 /* tareas de los días laborables a doble columna sobre las líneas */
-.pagina > .dia .tareas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:14px;align-content:start}
+.pagina > .dia .tareas.doble{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-flow:column;column-gap:14px;align-content:start}
 
 /* casillas llenas: títulos a una línea, y si no basta, letra menor */
 .tarea{min-width:0}
@@ -527,12 +527,25 @@ function pintar(direccion){
 }
 
 // Si una casilla no cabe, las tareas pasan a una línea con puntos suspensivos y, si aún no cabe, a letra más pequeña
+// Laborables: primero la columna izquierda; si no cabe, se compacta; si aún no, se llena la derecha
+// (la izquierda entera antes de pasar a la derecha), y por último letra menor
 function ajustar(ul){
-  ul.classList.remove('apretada', 'muy-apretada');
+  ul.classList.remove('apretada', 'muy-apretada', 'doble');
+  ul.style.gridTemplateRows = '';
   const desborda = () => ul.scrollHeight > ul.clientHeight + 1;
   if (!ul.clientHeight || !desborda()) return;
   ul.classList.add('apretada');
-  if (desborda()) ul.classList.add('muy-apretada');
+  if (!desborda()) return;
+  if (!ul.closest('.pagina > .dia')){ ul.classList.add('muy-apretada'); return; }
+  for (const extra of ['', 'muy-apretada']){
+    if (extra) ul.classList.add(extra);
+    const items = ul.querySelectorAll('.tarea');
+    const alto = items[0].getBoundingClientRect().height + 2;
+    const filas = Math.max(1, Math.floor((ul.clientHeight - 6) / alto));
+    ul.classList.add('doble');
+    ul.style.gridTemplateRows = `repeat(${filas}, auto)`;
+    if (items.length <= filas * 2) return;
+  }
 }
 let reajuste = null;
 addEventListener('resize', () => { clearTimeout(reajuste); reajuste = setTimeout(() => document.querySelectorAll('.tareas').forEach(ajustar), 150); });
@@ -769,11 +782,14 @@ function quitarMarca(){
 }
 function itemsDe(ul){ return [...ul.querySelectorAll('.tarea[data-id]')].filter(li => li.dataset.id !== arrastrando); }
 function indice(ul, x, y){
-  const horizontal = getComputedStyle(ul).display !== 'block';
+  const porColumnas = ul.classList.contains('doble');
+  const horizontal = !porColumnas && getComputedStyle(ul).display !== 'block';
   let i = 0;
   for (const it of itemsDe(ul)){
     const r = it.getBoundingClientRect();
-    const antes = horizontal
+    const antes = porColumnas
+      ? (x > r.right || (x >= r.left && y > r.top + r.height/2))
+      : horizontal
       ? (y > r.bottom || (y >= r.top && x > r.left + r.width/2))
       : y > r.top + r.height/2;
     if (antes) i++;
