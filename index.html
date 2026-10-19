@@ -123,7 +123,30 @@ button{font:inherit;cursor:pointer}
 .marca{height:4px;border-radius:2px;background:var(--argoz);margin:2px 0;list-style:none}
 
 /* ---------- vista día ---------- */
-.libro.vdia .pagina{display:flex;flex-direction:column}
+.pagina.pdia{display:flex;flex-direction:column}
+
+/* tareas de los días laborables a doble columna sobre las líneas */
+.pagina > .dia .tareas{display:grid;grid-template-columns:1fr 1fr;column-gap:14px;align-content:start}
+
+/* paso de página en 3D: una hoja gira sobre las anillas */
+.libro{perspective:2600px}
+.anillas{z-index:7}
+.tapa,.hoja{position:absolute;top:0;bottom:0;width:50%;pointer-events:none}
+.tapa{z-index:4}
+.tapa > .pagina,.cara > .pagina{position:absolute;inset:0;height:100%}
+.hoja{z-index:6;transform-style:preserve-3d;transition:transform .75s cubic-bezier(.42,.08,.28,1)}
+.hoja.adelante{left:50%;transform-origin:left center}
+.hoja.atras{left:0;transform-origin:right center}
+.cara{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.cara.dorso{transform:rotateY(180deg)}
+.cara::after{content:"";position:absolute;inset:0;opacity:0;pointer-events:none;animation:luz .75s ease-in-out}
+.hoja.adelante .frente::after,.hoja.atras .dorso::after{background:linear-gradient(to right, rgba(0,0,0,.35), rgba(0,0,0,0) 60%)}
+.hoja.adelante .dorso::after,.hoja.atras .frente::after{background:linear-gradient(to left, rgba(0,0,0,.35), rgba(0,0,0,0) 60%)}
+@keyframes luz{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+.tapa::after{content:"";position:absolute;inset:0;pointer-events:none;animation:sombraTapa .75s ease-in-out;opacity:0}
+.tapa.izq::after{background:linear-gradient(to left, rgba(0,0,0,.28), rgba(0,0,0,0) 70%)}
+.tapa.der::after{background:linear-gradient(to right, rgba(0,0,0,.28), rgba(0,0,0,0) 70%)}
+@keyframes sombraTapa{0%{opacity:0}45%{opacity:1}100%{opacity:0}}
 .cabdia{display:flex;align-items:baseline;gap:10px;border-bottom:2px solid var(--margen);margin-bottom:4px}
 .cabdia .num{font-family:'Caveat',cursive;font-weight:700;font-size:46px;line-height:.9}
 .cabdia .nombre{font-family:'Caveat',cursive;font-size:32px}
@@ -221,11 +244,11 @@ button{font:inherit;cursor:pointer}
 
 <!-- Vista día: horario de 3:00 a 22:00 -->
 <div class="libro vdia" id="libroDia" hidden>
-  <section class="pagina izq">
+  <section class="pagina izq pdia">
     <div class="cabdia"><span class="num" id="dNum"></span><span class="nombre" id="dNombre"></span><span class="mes" id="dMes"></span><button id="volver">‹ Semana</button></div>
     <div class="horas" id="horasIzq"></div>
   </section>
-  <section class="pagina der">
+  <section class="pagina der pdia">
     <div class="horas" id="horasDer"></div>
     <div class="sinhora" data-zona="sinhora">
       <div class="cab"><span class="nombre">Sin hora</span><button class="mas" title="Añadir">+</button></div>
@@ -466,16 +489,63 @@ function llenar(ul, lista, conHora){
   lista.filter(t => !ocultos.has(t.tema)).forEach(t => ul.appendChild(chip(t, conHora)));
 }
 
+const libroVisible = () => $('#libroSemana').hidden ? $('#libroDia') : $('#libroSemana');
+const movil = () => matchMedia('(max-width:760px)').matches;
+
 function pintar(direccion){
+  quitarHoja();
+  const viejo = direccion && !movil() ? foto(libroVisible()) : null;
   const libro = modo === 'semana' ? $('#libroSemana') : $('#libroDia');
   $('#libroSemana').hidden = modo !== 'semana';
   $('#libroDia').hidden = modo !== 'dia';
   if (modo === 'semana') pintarSemana(); else pintarDia();
   llenar($('#notas .tareas'), tareasDe('').sort(porOrden), false);
-  if (direccion){
-    libro.classList.remove('adelante','atras'); void libro.offsetWidth;
-    libro.classList.add(direccion > 0 ? 'adelante' : 'atras');
-  }
+  if (!direccion) return;
+  if (viejo){ pasarHoja(libro, viejo, direccion); return; }
+  libro.classList.remove('adelante','atras'); void libro.offsetWidth;
+  libro.classList.add(direccion > 0 ? 'adelante' : 'atras');
+}
+
+/* ---------- paso de página ---------- */
+// Copia muda de las dos páginas: sin ids ni zonas, para que nada la confunda con las de verdad
+function foto(libro){
+  const [izq, der] = libro.querySelectorAll(':scope > .pagina');
+  const limpia = p => {
+    const c = p.cloneNode(true);
+    c.querySelectorAll('[id],[data-zona],[data-dia],[data-id],[data-rut]').forEach(n =>
+      ['id','data-zona','data-dia','data-id','data-rut'].forEach(a => n.removeAttribute(a)));
+    c.querySelectorAll('.esquina').forEach(n => n.remove());
+    return c;
+  };
+  return {izq:limpia(izq), der:limpia(der)};
+}
+let hojaEnCurso = null;
+function quitarHoja(){
+  if (!hojaEnCurso) return;
+  clearTimeout(hojaEnCurso.t);
+  hojaEnCurso.nodos.forEach(n => n.remove());
+  hojaEnCurso = null;
+}
+function pasarHoja(libro, viejo, dir){
+  const nuevo = foto(libro);
+  const adelante = dir > 0;
+  // Debajo de la hoja que gira sigue viéndose la página vieja del lado del que sale
+  const tapa = document.createElement('div');
+  tapa.className = 'tapa ' + (adelante ? 'izq' : 'der');
+  tapa.style.left = adelante ? '0' : '50%';
+  tapa.appendChild(adelante ? viejo.izq : viejo.der);
+  const hoja = document.createElement('div');
+  hoja.className = 'hoja ' + (adelante ? 'adelante' : 'atras');
+  const frente = document.createElement('div'); frente.className = 'cara frente';
+  const dorso = document.createElement('div'); dorso.className = 'cara dorso';
+  frente.appendChild(adelante ? viejo.der : viejo.izq);
+  dorso.appendChild(adelante ? nuevo.izq : nuevo.der);
+  hoja.append(frente, dorso);
+  libro.append(tapa, hoja);
+  hojaEnCurso = {nodos:[tapa, hoja], t:setTimeout(quitarHoja, 800)};
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    hoja.style.transform = `rotateY(${adelante ? -180 : 180}deg)`;
+  }));
 }
 
 function pintarSemana(){
@@ -630,7 +700,7 @@ function quitarMarca(){
 }
 function itemsDe(ul){ return [...ul.querySelectorAll('.tarea[data-id]')].filter(li => li.dataset.id !== arrastrando); }
 function indice(ul, x, y){
-  const horizontal = getComputedStyle(ul).display === 'flex';
+  const horizontal = getComputedStyle(ul).display !== 'block';
   let i = 0;
   for (const it of itemsDe(ul)){
     const r = it.getBoundingClientRect();
