@@ -11,12 +11,14 @@
   --mesa:#2e2520; --mesa2:#4a3a30;
   --papel:#fbf7ec; --papel-sombra:#e8e0cc; --linea:#d6e0ec; --margen:#e6a3a3;
   --tinta:#2a2a3a; --tenue:#8b8472;
-  --im:#c9a227; --im-t:#3a2c00;
-  --sta:#d6248a; --sta-t:#fff;
-  --argoz:#2c6bd6; --argoz-t:#fff;
-  --admin:#d4d4d4; --admin-t:#333;
-  --personal:#ffffff; --personal-t:#2a2a3a;
-  --rojo:#d0262b; --rojo-t:#fff;
+  /* colores de tema claros: el texto siempre en negro */
+  --im:#f2dc8c; --im-t:#1d1d1d;
+  --sta:#f6b8dc; --sta-t:#1d1d1d;
+  --argoz:#b3cff6; --argoz-t:#1d1d1d;
+  --admin:#e7e7e7; --admin-t:#1d1d1d;
+  --personal:#ffffff; --personal-t:#1d1d1d;
+  --rojo:#f6a9a9; --rojo-t:#1d1d1d;
+  --rojo-tinta:#d0262b;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -83,7 +85,7 @@ button{font:inherit;cursor:pointer}
 .cab .ir:hover{background:var(--papel-sombra)}
 .cab .mas{margin-left:auto;border:0;background:transparent;color:var(--tenue);font-size:22px;line-height:1;padding:0 4px;border-radius:6px}
 .cab .mas:hover{background:var(--papel-sombra);color:var(--tinta)}
-.dia.hoy .cab .num{color:#fff;background:var(--rojo);border-radius:50%;padding:2px 8px 0;font-size:28px}
+.dia.hoy .cab .num{color:#fff;background:var(--rojo-tinta);border-radius:50%;padding:2px 8px 0;font-size:28px}
 .dia.finde .cab .num{font-size:28px}.dia.finde .cab .nombre{font-size:21px}
 .sobre{background:rgba(44,107,214,.06);box-shadow:inset 0 0 0 2px rgba(44,107,214,.28);border-radius:6px}
 
@@ -200,7 +202,7 @@ button{font:inherit;cursor:pointer}
 .acciones button{border:0;border-radius:6px;padding:5px 14px;font-size:15px}
 .acciones .guardar{background:var(--tinta);color:#fff}
 .acciones .cancelar{background:var(--papel-sombra)}
-.acciones .borrar{background:transparent;color:var(--rojo);margin-right:auto}
+.acciones .borrar{background:transparent;color:var(--rojo-tinta);margin-right:auto}
 
 /* paso de página */
 @keyframes pasarAdelante{from{opacity:.2;transform:translateX(26px)}to{opacity:1;transform:none}}
@@ -285,7 +287,7 @@ button{font:inherit;cursor:pointer}
     <h2>Conectar la agenda</h2>
     <p style="margin:0 0 8px;font-size:14px;color:var(--tenue)">Pega el token de GitHub con acceso al repo <b>agenda-datos</b>. Se guarda solo en este navegador.</p>
     <input type="password" id="tokTexto" style="width:100%;font:inherit;padding:4px 8px;border:1px solid var(--papel-sombra);border-radius:5px" placeholder="github_pat_…">
-    <p id="tokError" style="color:var(--rojo);font-size:14px;min-height:1em;margin:6px 0"></p>
+    <p id="tokError" style="color:var(--rojo-tinta);font-size:14px;min-height:1em;margin:6px 0"></p>
     <div class="acciones">
       <button class="cancelar" id="tokCancelar">Cancelar</button>
       <button class="guardar" id="tokGuardar">Conectar</button>
