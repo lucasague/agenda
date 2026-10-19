@@ -122,6 +122,9 @@ button{font:inherit;cursor:pointer}
 .t-personal{background:var(--personal);color:var(--personal-t);box-shadow:0 0 0 1px #cfc6b2, 0 1px 0 rgba(0,0,0,.12)}
 .t-rojo{background:var(--rojo);color:var(--rojo-t);font-weight:700}
 .t-rutina{background:transparent;color:var(--tinta);box-shadow:none;border:1.4px dashed #b9ae95;cursor:pointer;font-style:italic}
+/* seguimiento: lo lleva otro y Lucas solo lo vigila */
+.tarea.seg{background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,.55) 0 4px, transparent 4px 8px);font-style:italic}
+.tarea.seg .txt::before{content:"👁 ";font-style:normal}
 .marca{height:4px;border-radius:2px;background:var(--argoz);margin:2px 0;list-style:none}
 
 /* ---------- vista día ---------- */
@@ -488,10 +491,10 @@ const porHora = (a, b) => (a.hora || '99').localeCompare(b.hora || '99') || a.or
 
 function chip(t, conHora){
   const li = document.createElement('li');
-  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '');
+  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '');
   li.draggable = true;
   li.dataset.id = t.id;
-  li.title = t.texto + (t.por ? ' · apuntada por ' + t.por : '');
+  li.title = (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '');
   li.innerHTML = '<button class="chk" title="Hecha"></button><span class="txt"></span>';
   const txt = li.querySelector('.txt');
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
