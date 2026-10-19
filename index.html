@@ -36,7 +36,8 @@ button{font:inherit;cursor:pointer}
 .nav button{background:#f3e9d6;color:var(--mesa);border:0;border-radius:8px;padding:4px 12px;font-size:16px;box-shadow:0 2px 0 rgba(0,0,0,.35)}
 .nav button:hover{background:#fff}
 .leyenda{display:flex;gap:6px;flex-wrap:wrap;width:min(1400px,100%);margin-bottom:10px}
-.leyenda span{font-size:13px;padding:1px 9px;border-radius:4px}
+.leyenda button{font-size:13px;padding:1px 9px;border-radius:4px;border:0;user-select:none;transition:opacity .15s}
+.leyenda button.apagado{opacity:.3;text-decoration:line-through}
 
 /* ---------- libro ---------- */
 .libro{
@@ -391,7 +392,31 @@ const $ = s => document.querySelector(s);
 const rutinaHecha = (fecha, id) => !!(estado.rutina[fecha] && estado.rutina[fecha][id]);
 
 /* ---------- maquetación fija ---------- */
-$('#leyenda').innerHTML = TEMAS.map(t => `<span class="t-${t.id}">${t.nombre}</span>`).join('');
+// La leyenda filtra: clic oculta o muestra un tema; doble clic deja solo ese (o vuelve a todos)
+const CLAVE_OCULTOS = 'agenda-ocultos';
+let ocultos = new Set();
+try { ocultos = new Set(JSON.parse(localStorage.getItem(CLAVE_OCULTOS) || '[]')); } catch(e){}
+function pintarLeyenda(){
+  $('#leyenda').innerHTML = TEMAS.map(t =>
+    `<button class="t-${t.id}${ocultos.has(t.id) ? ' apagado' : ''}" data-tema="${t.id}" title="Clic: ocultar/mostrar · doble clic: solo este">${t.nombre}</button>`).join('');
+}
+function filtrar(nuevos){
+  ocultos = nuevos;
+  try { localStorage.setItem(CLAVE_OCULTOS, JSON.stringify([...ocultos])); } catch(e){}
+  pintarLeyenda(); pintar();
+}
+$('#leyenda').addEventListener('click', e => {
+  const b = e.target.closest('[data-tema]'); if (!b) return;
+  const n = new Set(ocultos);
+  n.has(b.dataset.tema) ? n.delete(b.dataset.tema) : n.add(b.dataset.tema);
+  filtrar(n);
+});
+$('#leyenda').addEventListener('dblclick', e => {
+  const b = e.target.closest('[data-tema]'); if (!b) return;
+  const soloEste = ocultos.size === TEMAS.length - 1 && !ocultos.has(b.dataset.tema);
+  filtrar(soloEste ? new Set() : new Set(TEMAS.map(t => t.id).filter(id => id !== b.dataset.tema)));
+});
+pintarLeyenda();
 document.querySelectorAll('.anillas').forEach(a => a.innerHTML = '<div class="anilla"></div>'.repeat(16));
 document.querySelectorAll('#libroSemana .dia').forEach(el => el.innerHTML =
   '<div class="cab"><button class="ir" title="Ver el horario del día"><span class="num"></span><span class="nombre"></span><span class="mes"></span></button><button class="mas" title="Añadir">+</button></div>' +
@@ -429,7 +454,7 @@ function chipRutina(fecha, r){
 }
 function llenar(ul, lista, conHora){
   ul.innerHTML = '';
-  lista.forEach(t => ul.appendChild(chip(t, conHora)));
+  lista.filter(t => !ocultos.has(t.tema)).forEach(t => ul.appendChild(chip(t, conHora)));
 }
 
 function pintar(direccion){
