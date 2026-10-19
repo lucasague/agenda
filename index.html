@@ -808,6 +808,13 @@ $('#tokGuardar').onclick = async () => {
   pendiente = estado.tareas.length > 0;
   sincronizar();
 };
+// Conectar abriendo la agenda con #token=… (el fragmento no sale del navegador); se guarda y se borra de la barra
+const enlace = location.hash.match(/token=([^&]+)/);
+if (enlace){
+  token = decodeURIComponent(enlace[1]);
+  try { localStorage.setItem(CLAVE_TOKEN, token); } catch(e){}
+  history.replaceState(null, '', location.pathname);
+}
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
 setInterval(sincronizar, 60000);
 
