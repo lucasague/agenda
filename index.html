@@ -353,7 +353,15 @@ function semanaISO(d){
   return Math.ceil(((x - Date.UTC(x.getUTCFullYear(),0,1)) / 864e5 + 1) / 7);
 }
 
-const completar = s => { s.rutina = s.rutina || {}; s.borradas = s.borradas || []; return s; };
+const completar = s => { s.rutina = s.rutina || {}; s.borradas = s.borradas || []; s.cumples = s.cumples || []; return s; };
+// Cumpleaños: lista anual (sale de Google Contacts con agenda.py cumples-contactos); se marcan como felicitados
+function cumplesDe(fecha){
+  const d = deIso(fecha);
+  return (estado.cumples || []).filter(c => c.mes === d.getMonth() + 1 && c.dia === d.getDate()).map(c => {
+    const edad = c.anio ? ` (${d.getFullYear() - c.anio})` : '';
+    return {id:'cumple:' + c.nombre, etiqueta:'🎂', texto:`Cumple de ${c.nombre}${edad}`, corto:c.nombre + edad, marcable:true};
+  });
+}
 function cargar(){
   try {
     const s = JSON.parse(localStorage.getItem(CLAVE));
@@ -399,7 +407,7 @@ function mezclar(nube, local){
     rutina[f] = rutina[f] || {};
     rutina[f][id] = !!(local.rutina[f] && local.rutina[f][id]);
   }
-  return {tareas:[...porId.values()].filter(t => !borradas.includes(t.id)), rutina, borradas};
+  return {tareas:[...porId.values()].filter(t => !borradas.includes(t.id)), rutina, borradas, cumples:nube.cumples};
 }
 async function sincronizar(){
   // Con el editor abierto o arrastrando no se toca `estado`: la tarea en mano quedaría huérfana
@@ -601,7 +609,7 @@ function pintarSemana(){
     el.querySelector('.nombre').textContent = DIAS[i];
     el.querySelector('.mes').textContent = MESES[d.getMonth()];
     el.classList.toggle('hoy', f === hoy);
-    el.querySelector('.rutinas').innerHTML = rutinaDe(f).map(r => r.marcable
+    el.querySelector('.rutinas').innerHTML = [...rutinaDe(f), ...cumplesDe(f)].map(r => r.marcable
       ? `<span class="rut${rutinaHecha(f, r.id) ? ' hecha' : ''}" data-rut="${r.id}" data-fecha="${f}" title="${r.texto}"><i></i>${r.etiqueta} ${r.corto}</span>`
       : `<span class="rut fija" title="${r.texto}">${r.etiqueta} ${r.corto}</span>`).join('');
     llenar(el.querySelector('.tareas'), tareasDe(f).sort(porHora), true);
@@ -626,8 +634,9 @@ function pintarDia(){
     rutinaDe(diaActual).filter(r => r.hora.slice(0,2) === h).reverse().forEach(r => ul.prepend(chipRutina(diaActual, r)));
   });
   const enFranja = new Set([...HORAS_IZQ, ...HORAS_DER].map(hh));
-  llenar($('.sinhora .tareas'),
-    delDia.filter(t => !t.hora || !enFranja.has(t.hora.slice(0,2))).sort(porHora), true);
+  const sinHora = $('.sinhora .tareas');
+  llenar(sinHora, delDia.filter(t => !t.hora || !enFranja.has(t.hora.slice(0,2))).sort(porHora), true);
+  cumplesDe(diaActual).reverse().forEach(c => sinHora.prepend(chipRutina(diaActual, c)));
 }
 
 /* ---------- navegación ---------- */
