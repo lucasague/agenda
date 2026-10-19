@@ -311,11 +311,10 @@ const TEMAS = [
 const RUTINA = [
   {id:'despertar',     hora:'03:45', etiqueta:'3:45', texto:'Despertador',          corto:'Despertador',   marcable:true},
   {id:'contemplativa', hora:'04:00', etiqueta:'4–5',  texto:'Hora contemplativa',   corto:'Contemplativa', marcable:true},
-  {id:'trabajo',       hora:'05:00', etiqueta:'5:00', texto:'Comienzo del trabajo', corto:'Trabajo',       laborable:true},
 ];
 const rutinaDe = fecha => RUTINA.filter(r => !r.laborable || diaSemana(deIso(fecha)) < 5);
-const HORAS_IZQ = [3,4,5,6,7,8,9,10,11,12];
-const HORAS_DER = [13,14,15,16,17,18,19,20,21,22];
+const HORAS_IZQ = [3,4,5,6,7,8,9,10,11];
+const HORAS_DER = [12,13,14,15,16,17,18,19,20];
 const DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const CLAVE = 'agenda-lucas-v1';
@@ -596,8 +595,39 @@ function mover(n){
   }
   pintar(n || 1);
 }
-function abrirDia(fecha){ modo = 'dia'; diaActual = fecha; pintar(1); }
-function volverSemana(){ modo = 'semana'; lunes = lunesDe(deIso(diaActual)); pintar(-1); }
+// Entrar en un día es acercarse a su casilla: el horario crece desde ella; al volver, encoge hasta ella
+const curva = 'cubic-bezier(.2,.75,.25,1)';
+function abrirDia(fecha, celda){
+  const r = celda.getBoundingClientRect();
+  modo = 'dia'; diaActual = fecha; pintar();
+  if (movil()) return;
+  const libro = $('#libroDia'), L = libro.getBoundingClientRect();
+  Object.assign(libro.style, {transformOrigin:'0 0', transition:'none', opacity:'.25',
+    transform:`translate(${r.left - L.left}px,${r.top - L.top}px) scale(${r.width / L.width},${r.height / L.height})`});
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    Object.assign(libro.style, {transition:`transform .5s ${curva}, opacity .3s ease-out`, transform:'', opacity:''});
+  }));
+  setTimeout(() => Object.assign(libro.style, {transition:'', transformOrigin:''}), 550);
+}
+function volverSemana(){
+  const dia = $('#libroDia'), L = dia.getBoundingClientRect();
+  const fantasma = movil() ? null : dia.cloneNode(true);
+  modo = 'semana'; lunes = lunesDe(deIso(diaActual)); pintar();
+  if (!fantasma) return;
+  fantasma.removeAttribute('id');
+  fantasma.querySelectorAll('[id],[data-zona]').forEach(n => { n.removeAttribute('id'); n.removeAttribute('data-zona'); });
+  Object.assign(fantasma.style, {position:'fixed', left:L.left + 'px', top:L.top + 'px', width:L.width + 'px', height:L.height + 'px',
+    margin:'0', zIndex:'30', pointerEvents:'none', transformOrigin:'0 0'});
+  fantasma.hidden = false;
+  document.body.appendChild(fantasma);
+  const celda = document.querySelector(`#libroSemana [data-fecha="${diaActual}"]`);
+  const r = celda.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    Object.assign(fantasma.style, {transition:`transform .45s ${curva}, opacity .45s ease-in`, opacity:'0',
+      transform:`translate(${r.left - L.left}px,${r.top - L.top}px) scale(${r.width / L.width},${r.height / L.height})`});
+  }));
+  setTimeout(() => fantasma.remove(), 500);
+}
 
 $('#ant').onclick = () => mover(-1);
 $('#sig').onclick = () => mover(1);
@@ -625,12 +655,19 @@ document.addEventListener('click', e => {
   const chk = e.target.closest('.chk');
   if (chk){
     const t = estado.tareas.find(x => x.id === chk.closest('.tarea').dataset.id);
-    t.hecha = !t.hecha; tocar(t); guardar(); pintar(); return;
+    t.hecha = !t.hecha;
+    // Lo resuelto hoy sin hora se queda en la hora en que se resolvió
+    const hoy = iso(new Date());
+    if (t.hecha && !t.hora && (!t.fecha || t.fecha === hoy)){
+      const n = new Date();
+      t.fecha = hoy; t.hora = hh(n.getHours()) + ':' + hh(n.getMinutes());
+    }
+    tocar(t); guardar(); pintar(); return;
   }
   const li = e.target.closest('.tarea');
   if (li){ abrirEditor(estado.tareas.find(x => x.id === li.dataset.id)); return; }
   const ir = e.target.closest('.ir');
-  if (ir){ abrirDia(ir.closest('.dia').dataset.fecha); return; }
+  if (ir){ const celda = ir.closest('.dia'); abrirDia(celda.dataset.fecha, celda); return; }
   const mas = e.target.closest('.mas');
   if (mas){ const z = mas.closest('[data-zona]'); abrirEditor(null, fechaDeZona(z), ''); }
 });
