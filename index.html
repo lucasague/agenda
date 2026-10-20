@@ -512,13 +512,13 @@ const $ = s => document.querySelector(s);
 const rutinaHecha = (fecha, id) => !!(estado.rutina[fecha] && estado.rutina[fecha][id]);
 
 /* ---------- maquetación fija ---------- */
-// La leyenda filtra: clic oculta o muestra un tema; doble clic deja solo ese (o vuelve a todos)
+// La leyenda filtra: clic oculta o muestra un tema; clic derecho (o pulsación larga en el móvil) deja solo ese (o vuelve a todos)
 const CLAVE_OCULTOS = 'agenda-ocultos';
 let ocultos = new Set();
 try { ocultos = new Set(JSON.parse(localStorage.getItem(CLAVE_OCULTOS) || '[]')); } catch(e){}
 function pintarLeyenda(){
   $('#leyenda').innerHTML = TEMAS.map(t =>
-    `<button class="t-${t.id}${ocultos.has(t.id) ? ' apagado' : ''}" data-tema="${t.id}" title="Clic: ocultar/mostrar · doble clic: solo este">${t.nombre}</button>`).join('');
+    `<button class="t-${t.id}${ocultos.has(t.id) ? ' apagado' : ''}" data-tema="${t.id}" title="Clic: ocultar/mostrar · clic derecho: solo este">${t.nombre}</button>`).join('');
 }
 function filtrar(nuevos){
   ocultos = nuevos;
@@ -531,8 +531,9 @@ $('#leyenda').addEventListener('click', e => {
   n.has(b.dataset.tema) ? n.delete(b.dataset.tema) : n.add(b.dataset.tema);
   filtrar(n);
 });
-$('#leyenda').addEventListener('dblclick', e => {
+$('#leyenda').addEventListener('contextmenu', e => {
   const b = e.target.closest('[data-tema]'); if (!b) return;
+  e.preventDefault();
   const soloEste = ocultos.size === TEMAS.length - 1 && !ocultos.has(b.dataset.tema);
   filtrar(soloEste ? new Set() : new Set(TEMAS.map(t => t.id).filter(id => id !== b.dataset.tema)));
 });
