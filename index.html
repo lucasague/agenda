@@ -231,6 +231,26 @@ button{font:inherit;cursor:pointer}
 /* dos tramos: primero se abre el primer pliegue, luego el segundo (~550 ms) */
 .papel.abriendo .papel-hoja{animation:desdoblar .55s ease-out both}
 .papel.cerrando .papel-hoja{animation:doblar .45s ease-in both}
+/* desplegado también a un lado (si hay ancho): primero baja, luego se abre hacia el lado; al doblar, al revés */
+.papel.abierto .papel-hoja.de{transform-origin:0 0}
+.papel.abierto .papel-hoja.iz{transform-origin:100% 0}
+.papel.abriendo .papel-hoja.de,.papel.abriendo .papel-hoja.iz{animation:desplegarLado .8s ease-out both}
+.papel.cerrando .papel-hoja.de,.papel.cerrando .papel-hoja.iz{animation:plegarLado .65s ease-in both}
+@keyframes desplegarLado{
+  0%{transform:perspective(600px) rotateX(-88deg) scaleX(.35);opacity:.2}
+  69%{transform:perspective(600px) rotateX(0) scaleX(.35);opacity:1}
+  100%{transform:perspective(600px) rotateX(0) scaleX(1);opacity:1}
+}
+@keyframes plegarLado{
+  0%{transform:perspective(600px) rotateX(0) scaleX(1);opacity:1}
+  31%{transform:perspective(600px) rotateX(0) scaleX(.35);opacity:1}
+  100%{transform:perspective(600px) rotateX(-88deg) scaleX(.35);opacity:.2}
+}
+/* lista en varias columnas (la hoja se abre a un lado): columnas de ancho fijo, con marcas verticales entre ellas */
+.papel.abierto .papel-lista.multi{display:grid;grid-template-columns:repeat(var(--cols),var(--colw));grid-template-rows:repeat(var(--rows),auto);
+  grid-auto-flow:column;align-items:start;
+  background-image:linear-gradient(to bottom, transparent calc(33.33% - .5px), rgba(0,0,0,.16) calc(33.33% - .5px) calc(33.33% + .5px), transparent calc(33.33% + .5px) calc(66.66% - .5px), rgba(0,0,0,.16) calc(66.66% - .5px) calc(66.66% + .5px), transparent calc(66.66% + .5px)),
+    repeating-linear-gradient(to right, transparent 0, transparent calc(var(--colw) - 1px), rgba(0,0,0,.16) calc(var(--colw) - 1px), rgba(0,0,0,.16) var(--colw))}
 @keyframes desdoblar{
   0%{transform:perspective(600px) rotateX(-88deg);opacity:.2}
   45%{transform:perspective(600px) rotateX(-14deg);opacity:1}
@@ -665,8 +685,8 @@ function cerrarPapeles(){
     p.classList.add('cerrando');
     setTimeout(() => {
       if (papelesAbiertos.has(p.dataset.clave)) return;  // se volvió a abrir mientras se doblaba
-      p.classList.remove('abierto', 'cerrando');
-    }, 450);
+      p.classList.remove('abierto', 'cerrando', 'lado');
+    }, p.classList.contains('lado') ? 650 : 450);
   });
 }
 function alternarPapel(li){
@@ -677,19 +697,51 @@ function alternarPapel(li){
   li.classList.add('abierto', 'abriendo');
   papelesAbiertos.add(li.dataset.clave);
   posicionarPapel(li);
-  setTimeout(() => li.classList.remove('abriendo'), 600);
+  setTimeout(() => li.classList.remove('abriendo'), 850);
+}
+// Ancho de la hoja desplegada a un lado: se mide hasta el margen de la página (la página recorta, no hay scroll).
+// Cada columna mide como mucho 200 px (o lo que mida la casilla si es más estrecha), como mucho 4, y al menos 2 tareas
+// por columna (con menos de 3 tareas no se abre a un lado). A la derecha si hay sitio; si no, a la izquierda; si no, nada (como antes).
+const MAX_COLUMNAS = 4, COL_MAX = 200;
+function ladoLibre(pag, P, u, hoja, nT){
+  if (movil() || nT < 3) return null;
+  const cs = getComputedStyle(hoja), pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const pc = getComputedStyle(pag), colW = Math.min(u.width, COL_MAX), tope = Math.min(MAX_COLUMNAS, Math.ceil(nT / 2));
+  // Hasta el borde de la caja de contenido de la página (sin el margen del lomo ni de la esquina)
+  const bordeI = P.left + parseFloat(pc.paddingLeft), bordeD = P.right - parseFloat(pc.paddingRight);
+  // n columnas caben si n*colW + pad <= ancho disponible
+  const caben = libre => Math.floor((libre - pad) / colW);
+  const nDe = Math.min(tope, caben(bordeD - u.left));
+  if (nDe >= 2) return {lado:'de', cols:nDe, colW, pad};
+  const nIz = Math.min(tope, caben(u.right - bordeI));
+  if (nIz >= 2) return {lado:'iz', cols:nIz, colW, pad};
+  return null;
 }
 // La hoja desdoblada cuelga de su pestaña, con el ancho de la casilla, y baja hasta el borde de la página
 // (la recorta .pagina, así que si no hay sitio debajo sube lo justo y se queda con scroll)
 function posicionarPapel(li){
-  const pag = li.closest('.pagina'), hoja = li.querySelector('.papel-hoja');
+  const pag = li.closest('.pagina'), hoja = li.querySelector('.papel-hoja'), lista = li.querySelector('.papel-lista');
   if (!pag || !hoja || getComputedStyle(hoja).display === 'none') return;
   const P = pag.getBoundingClientRect(), u = li.parentElement.getBoundingClientRect(), r = li.getBoundingClientRect();
   const alto = pag.clientHeight, minimo = 180;
   let arriba = r.top - P.top + li.querySelector('.papel-titulo').offsetHeight;
   if (alto - arriba < minimo) arriba = Math.max(0, alto - minimo - 6);
-  hoja.style.left = (u.left - P.left) + 'px';
-  hoja.style.width = u.width + 'px';
+  const nT = lista.querySelectorAll(':scope > .tarea').length;
+  const L = ladoLibre(pag, P, u, hoja, nT);
+  // Sin lado: la hoja tiene el ancho de la casilla, como siempre. Con lado: columnas, a la derecha o a la izquierda
+  const ancho = L ? L.cols * L.colW + L.pad : u.width;
+  const izq = L && L.lado === 'iz' ? u.right - P.left - ancho : u.left - P.left;
+  li.classList.toggle('lado', !!L);
+  hoja.classList.toggle('de', !!L && L.lado === 'de');
+  hoja.classList.toggle('iz', !!L && L.lado === 'iz');
+  lista.classList.toggle('multi', !!L);
+  if (L){
+    lista.style.setProperty('--cols', L.cols);
+    lista.style.setProperty('--colw', L.colW + 'px');
+    lista.style.setProperty('--rows', Math.ceil(nT / L.cols));
+  }
+  hoja.style.left = izq + 'px';
+  hoja.style.width = ancho + 'px';
   hoja.style.top = arriba + 'px';
   hoja.style.maxHeight = Math.min(alto - arriba - 6, 520) + 'px';
 }
