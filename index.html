@@ -331,8 +331,9 @@ const RUTINA = [
   {id:'recoger',       hora:'11:45', texto:'Recoger a los niños', corto:'Recoger niños', dias:[0,1,3]},
   {id:'intercambio',   hora:'13:00', texto:'Intercambio familiar', corto:'Intercambio', dias:[2]},
   {id:'recoger-x',     hora:'13:30', texto:'Recoger a los niños', corto:'Recoger niños', dias:[2]},
-  {id:'plan-diego',    hora:'14:00', texto:'Plan Diego', dias:[1]},
-  {id:'plan-jose',     hora:'14:00', texto:'Plan José', dias:[3]},
+  {id:'taekwondo-ninos', hora:'14:00', texto:'Taekwondo de los niños', corto:'Taekwondo niños', dias:[1,3]},
+  {id:'plan-diego',    hora:'15:00', texto:'Plan Diego', dias:[1]},
+  {id:'plan-jose',     hora:'15:00', texto:'Plan José', dias:[3]},
 ];
 RUTINA.forEach(r => { r.etiqueta = (+r.hora.slice(0,2)) + ':' + r.hora.slice(3); r.corto = r.corto || r.texto; r.marcable = true; });
 const rutinaDe = fecha => RUTINA.filter(r => !r.dias || r.dias.includes(diaSemana(deIso(fecha))));
