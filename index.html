@@ -125,6 +125,14 @@ button{font:inherit;cursor:pointer}
 /* seguimiento: lo lleva otro y Lucas solo lo vigila */
 .tarea.seg{background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,.55) 0 4px, transparent 4px 8px);font-style:italic}
 .tarea.seg .txt::before{content:"👁 ";font-style:normal}
+/* choques de horario: borde y subrayado rojo discretos; el número en la cabecera del día; ⚠ en la tarea y en el papelito */
+.tarea.choque{box-shadow:0 0 0 1.2px #c0392b, 0 1px 0 rgba(0,0,0,.12)}
+.tarea.choque .txt{text-decoration:underline wavy #c0392b;text-decoration-thickness:1px;text-underline-offset:3px}
+.aviso{color:#c0392b;font-style:normal;font-weight:700;margin-right:3px;font-size:.9em}
+.aviso[hidden],.choq[hidden]{display:none}
+.choq{font-size:12px;color:#c0392b;white-space:nowrap}
+.cab .choq{margin-left:auto}.cab .choq + .mas{margin-left:0}
+.cabdia .choq{margin-left:auto;font-size:14px}.cabdia .choq + button{margin-left:0}
 .marca{height:4px;border-radius:2px;background:var(--argoz);margin:2px 0;list-style:none}
 
 /* ---------- vista día ---------- */
@@ -314,7 +322,7 @@ button{font:inherit;cursor:pointer}
 <!-- Vista día: horario de 3:00 a 22:00 -->
 <div class="libro vdia" id="libroDia" hidden>
   <section class="pagina izq pdia">
-    <div class="cabdia"><span class="num" id="dNum"></span><span class="nombre" id="dNombre"></span><span class="mes" id="dMes"></span><button id="volver">‹ Semana</button></div>
+    <div class="cabdia"><span class="num" id="dNum"></span><span class="nombre" id="dNombre"></span><span class="mes" id="dMes"></span><span class="choq" id="dChoq" hidden></span><button id="volver">‹ Semana</button></div>
     <div class="horas" id="horasIzq"></div>
   </section>
   <section class="pagina der pdia">
@@ -531,7 +539,7 @@ $('#leyenda').addEventListener('dblclick', e => {
 pintarLeyenda();
 document.querySelectorAll('.anillas').forEach(a => a.innerHTML = '<div class="anilla"></div>'.repeat(16));
 document.querySelectorAll('#libroSemana .dia').forEach(el => el.innerHTML =
-  '<div class="cab"><button class="ir" title="Ver el horario del día"><span class="num"></span><span class="nombre"></span><span class="mes"></span></button><button class="mas" title="Añadir">+</button></div>' +
+  '<div class="cab"><button class="ir" title="Ver el horario del día"><span class="num"></span><span class="nombre"></span><span class="mes"></span></button><span class="choq" hidden></span><button class="mas" title="Añadir">+</button></div>' +
   '<div class="rutinas"></div><ul class="tareas"></ul>');
 const franjas = (horas) => horas.map(h =>
   `<div class="franja" data-zona="franja" data-h="${hh(h)}"><span class="h">${h}:00</span><ul class="tareas"></ul></div>`).join('');
@@ -545,14 +553,78 @@ function tareasDe(fecha){
 const porOrden = (a, b) => a.orden - b.orden;
 const porHora = (a, b) => (a.hora || '99').localeCompare(b.hora || '99') || a.orden - b.orden;
 
+/* ---------- choques de horario ---------- */
+// Regla: dos tareas del día con hora, no hechas y no seguimiento, chocan si se solapan. Duración por defecto 60 min;
+// "(4-6)" o "4-6" en el texto = inicio-fin en horas (duración = fin − inicio, desde la hora de la tarea).
+// La rutina fija cuenta contra las tareas (no entre sí): 30 min, 60 para Taekwondo de los niños y Hora contemplativa.
+// Despertador y Oración de la mañana no cuentan. Si una tarea del día empieza por el nombre de una rutina, esa rutina no cuenta ese día.
+const RUT_SIN_CHOQUE = ['despertar', 'oracion'];
+const RUT_DURACION = {'taekwondo-ninos':60, 'contemplativa':60};
+let choques = new Map(), choquesDia = {};  // id de tarea -> textos con los que choca; fecha -> nº de choques
+const aMin = s => (+s.slice(0,2)) * 60 + (+s.slice(3,5) || 0);
+function duracionTarea(t){
+  const m = t.texto.match(/\((\d{1,2})\s*[-–]\s*(\d{1,2})\)/) || t.texto.match(/\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b/);
+  if (m && +m[2] > +m[1] && +m[2] <= 24) return (+m[2] - +m[1]) * 60;
+  return 60;
+}
+const empiezaPor = (texto, r) => { const x = texto.trim().toLowerCase(); return [r.texto, r.corto].some(n => x.startsWith(n.toLowerCase())); };
+function calcularChoques(){
+  choques = new Map(); choquesDia = {};
+  const anadir = (id, txt) => choques.set(id, [...(choques.get(id) || []), txt]);
+  const fechas = new Set(estado.tareas.filter(t => t.fecha && t.hora).map(t => t.fecha));
+  for (const f of fechas){
+    const todas = tareasDe(f);
+    const items = todas.filter(t => t.hora && !t.hecha && !t.seg).map(t => {
+      const ini = aMin(t.hora);
+      return {id:t.id, ini, fin:ini + duracionTarea(t), tarea:true, txt:horaBonita(t.hora) + ' ' + t.texto};
+    });
+    rutinaDe(f).filter(r => !RUT_SIN_CHOQUE.includes(r.id) && !todas.some(t => empiezaPor(t.texto, r))).forEach(r => {
+      const ini = aMin(r.hora);
+      items.push({ini, fin:ini + (RUT_DURACION[r.id] || 30), tarea:false, txt:r.etiqueta + ' ' + r.texto});
+    });
+    let n = 0;
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++){
+      const a = items[i], b = items[j];
+      if (!a.tarea && !b.tarea) continue;
+      if (!(a.ini < b.fin && b.ini < a.fin)) continue;
+      n++;
+      if (a.tarea) anadir(a.id, b.txt);
+      if (b.tarea) anadir(b.id, a.txt);
+    }
+    if (n) choquesDia[f] = n;
+  }
+}
+// Cabeceras del día (semana y día) y papelitos que llevan una tarea en choque
+function pintarAvisos(){
+  const aviso = (el, n) => {
+    if (!el) return;
+    el.hidden = !n;
+    el.textContent = n ? `⚠ ${n}` : '';
+    el.title = n ? `${n} ${n === 1 ? 'choque' : 'choques'} de horario este día` : '';
+  };
+  document.querySelectorAll('#libroSemana .dia').forEach(el => aviso(el.querySelector('.cab .choq'), choquesDia[el.dataset.fecha] || 0));
+  aviso($('#dChoq'), choquesDia[diaActual] || 0);
+  document.querySelectorAll('.papel').forEach(p => {
+    const hay = !!p.querySelector('.papel-lista > .tarea.choque');
+    let s = p.querySelector('.papel-titulo > .aviso');
+    if (hay && !s){
+      s = document.createElement('span'); s.className = 'aviso'; s.textContent = '⚠';
+      s.title = 'Hay una tarea en choque de horario dentro'; p.querySelector('.papel-titulo').prepend(s);
+    }
+    if (!hay && s) s.remove();
+  });
+}
+
 function chip(t, conHora){
   const li = document.createElement('li');
-  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '');
+  const choca = choques.get(t.id);
+  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '') + (choca ? ' choque' : '');
   li.draggable = true;
   li.dataset.id = t.id;
-  li.title = (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '');
+  li.title = (choca ? 'Choca con ' + choca.join(' y ') + '\n' : '') + (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '');
   li.innerHTML = '<button class="chk" title="Hecha"></button><span class="txt"></span>';
   const txt = li.querySelector('.txt');
+  if (choca){ const w = document.createElement('span'); w.className = 'aviso'; w.textContent = '⚠'; txt.appendChild(w); }
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
   txt.append(t.texto);
   return li;
@@ -584,9 +656,11 @@ function pintar(direccion){
   const libro = modo === 'semana' ? $('#libroSemana') : $('#libroDia');
   $('#libroSemana').hidden = modo !== 'semana';
   $('#libroDia').hidden = modo !== 'dia';
+  calcularChoques();
   if (modo === 'semana') pintarSemana(); else pintarDia();
   llenar($('#notas .tareas'), tareasDe('').sort(porOrden), false);
   libro.querySelectorAll('.tareas').forEach(ajustar);
+  pintarAvisos();
   libro.querySelectorAll('.papel.abierto').forEach(posicionarPapel);
   if (!direccion) return;
   if (viejo){ pasarHoja(libro, viejo, direccion); return; }
