@@ -126,6 +126,11 @@ button{font:inherit;cursor:pointer}
 .t-rutina{background:transparent;color:var(--tinta);box-shadow:none;border:1.4px dashed #b9ae95;cursor:pointer;font-style:italic}
 /* super alarma programada (agenda.py alarma): campanita antes del texto */
 .campana{font-size:.85em;margin-right:3px;font-style:normal}
+/* cita con alguien que le espera (agenda.py cita): negrita, un pelín más grande y campanita a pluma, del color de la letra */
+.tarea.cita{font-weight:700;font-size:16.5px}
+.tareas.muy-apretada .tarea.cita{font-size:14px}
+.campanita{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.15em;margin-right:3px;overflow:visible}
+.campanita path{fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
 /* seguimiento: lo lleva otro y Lucas solo lo vigila */
 .tarea.seg{background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,.55) 0 4px, transparent 4px 8px);font-style:italic}
 .tarea.seg .txt::before{content:"👁 ";font-style:normal}
@@ -669,7 +674,7 @@ function pintarAvisos(){
 function chip(t, conHora){
   const li = document.createElement('li');
   const choca = choques.get(t.id);
-  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '') + (choca ? ' choque' : '');
+  li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '') + (t.cita ? ' cita' : '') + (choca ? ' choque' : '');
   li.draggable = true;
   li.dataset.id = t.id;
   li.title = (choca ? 'Choca con ' + choca.join(' y ') + '\n' : '') + (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '');
@@ -677,7 +682,16 @@ function chip(t, conHora){
   const txt = li.querySelector('.txt');
   if (choca){ const w = document.createElement('span'); w.className = 'aviso'; w.textContent = '⚠'; txt.appendChild(w); }
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
-  if (t.alarma){ const b = document.createElement('span'); b.className = 'campana'; b.textContent = '🔔'; b.title = 'Super alarma a las ' + horaBonita(t.alarma); txt.appendChild(b); }
+  if (t.cita){
+    // trazo a mano, como la letra; con super alarma, además las ondas de que suena
+    const NS = 'http://www.w3.org/2000/svg', b = document.createElementNS(NS, 'svg');
+    b.setAttribute('class', 'campanita'); b.setAttribute('viewBox', '0 0 20 20');
+    b.innerHTML = '<path d="M10 2.6v1.3M5.3 14.3c1.2-1.4 1.1-3.4 1.2-5.2.2-2.6 1.6-4.2 3.6-4.3 2 .1 3.3 1.8 3.5 4.3.1 1.8 0 3.8 1.3 5.1M4.2 14.5c3.8-.6 7.8-.6 11.7 0M8.4 16.4c.3 1.1 1 1.6 1.7 1.6s1.3-.6 1.6-1.6"/>'
+      + (t.alarma ? '<path d="M3.4 6.2c-.7 1.2-.9 2.6-.6 3.9M16.7 6.2c.7 1.2.9 2.6.6 3.9"/>' : '');
+    const tit = document.createElementNS(NS, 'title');
+    tit.textContent = 'Cita: alguien te espera' + (t.alarma ? ' · super alarma a las ' + horaBonita(t.alarma) : '');
+    b.appendChild(tit); txt.appendChild(b);
+  } else if (t.alarma){ const b = document.createElement('span'); b.className = 'campana'; b.textContent = '🔔'; b.title = 'Super alarma a las ' + horaBonita(t.alarma); txt.appendChild(b); }
   txt.append(t.texto);
   return li;
 }
