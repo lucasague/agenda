@@ -1252,8 +1252,21 @@ if (enlace){
   try { localStorage.setItem(CLAVE_TOKEN, token); } catch(e){}
   history.replaceState(null, '', location.pathname);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
-setInterval(sincronizar, 60000);
+// Pestaña vieja = cliente viejo que guarda con lógica vieja (21/10/2026: una abierta antes de rutina_dia
+// borró la contemplativa movida). publicar.ps1 pone la versión aquí y en version.txt; si cambia, se recarga
+// sola en cuanto no haya nada a medias (el agenda-datos/proteger-campos repone lo que se pierda mientras).
+const VERSION_WEB = 'e9a115030803';
+async function mirarVersion(){
+  if (VERSION_WEB.startsWith('__') || pendiente || sincronizando || arrastrando || $('#velo').classList.contains('abierto')) return;
+  try {
+    const r = await fetch('version.txt?t=' + Date.now(), {cache:'no-store'});
+    if (!r.ok) return;
+    const v = (await r.text()).trim();
+    if (v && v !== VERSION_WEB) location.replace(location.pathname + '?v=' + encodeURIComponent(v));
+  } catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden){ mirarVersion(); sincronizar(); } });
+setInterval(() => { mirarVersion(); sincronizar(); }, 60000);
 
 pintar();
 avisoNube();
