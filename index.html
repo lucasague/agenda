@@ -96,6 +96,8 @@ button{font:inherit;cursor:pointer}
 .rut.fija{cursor:default}
 .t-rutina.fija{cursor:default;border-style:solid;border-color:#ddd3bd}
 .rut.hecha{text-decoration:line-through}
+/* lo fijo cambiado solo ese día (rutina_dia): asterisco; el título dice qué era */
+.rut.cambiada::after,.tarea.t-rutina.cambiada .txt::after{content:"*";margin-left:1px;font-style:normal}
 .rut.hecha i{background:var(--tenue);color:var(--papel)}
 .rut.hecha i::after{content:"✓"}
 
@@ -429,7 +431,23 @@ const RUTINA = [
   {id:'plan-jose',     hora:'15:00', texto:'Plan José', dias:[3]},
 ];
 RUTINA.forEach(r => { r.etiqueta = (+r.hora.slice(0,2)) + ':' + r.hora.slice(3); r.corto = r.corto || r.texto; r.marcable = true; });
-const rutinaDe = fecha => RUTINA.filter(r => !r.dias || r.dias.includes(diaSemana(deIso(fecha))));
+// Lo fijo cambiado un solo día: estado.rutina_dia[fecha][id] = {hora?, texto?, corto?, quitar?} (lo escribe agenda.py rutina-dia).
+// Un id que ese día no toca y lleva hora se añade ese día. El marcado como hecho sigue en estado.rutina[fecha][id].
+function rutinaDe(fecha){
+  const cambios = ((estado && estado.rutina_dia) || {})[fecha] || {};
+  const ds = diaSemana(deIso(fecha));
+  return RUTINA.filter(r => {
+    const c = cambios[r.id];
+    if (c && c.quitar) return false;
+    return !r.dias || r.dias.includes(ds) || !!(c && c.hora);
+  }).map(r => {
+    const c = cambios[r.id];
+    if (!c) return r;
+    const hora = c.hora || r.hora, texto = c.texto || r.texto;
+    return {...r, hora, texto, corto:c.corto || c.texto || r.corto, etiqueta:(+hora.slice(0,2)) + ':' + hora.slice(3),
+      cambio:`Cambiado solo este día (lo fijo: ${r.etiqueta} ${r.texto})`};
+  }).sort((a, b) => a.hora.localeCompare(b.hora));
+}
 const HORAS_IZQ = [3,4,5,6,7,8,9,10,11];
 const HORAS_DER = [12,13,14,15,16,17,18,19,20];
 const DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
@@ -504,7 +522,8 @@ function mezclar(nube, local){
     rutina[f] = rutina[f] || {};
     rutina[f][id] = !!(local.rutina[f] && local.rutina[f][id]);
   }
-  return {tareas:[...porId.values()].filter(t => !borradas.includes(t.id)), rutina, borradas, cumples:nube.cumples};
+  // Lo que la web no edita (cumples, rutina_dia y cualquier campo nuevo) viene de la nube tal cual: nunca se pierde al subir
+  return {...nube, tareas:[...porId.values()].filter(t => !borradas.includes(t.id)), rutina, borradas};
 }
 async function sincronizar(){
   // Con el editor abierto o arrastrando no se toca `estado`: la tarea en mano quedaría huérfana
@@ -588,7 +607,7 @@ const porHora = (a, b) => (a.hora || '99').localeCompare(b.hora || '99') || a.or
 // Regla: dos tareas del día con hora, no hechas y no seguimiento, chocan si se solapan. Duración por defecto 60 min;
 // "(4-6)" o "4-6" en el texto = inicio-fin en horas (duración = fin − inicio, desde la hora de la tarea).
 // La rutina fija cuenta contra las tareas (no entre sí): 30 min, 60 para Taekwondo de los niños y Hora contemplativa.
-// Despertador y Oración de la mañana no cuentan. Si una tarea del día empieza por el nombre de una rutina, esa rutina no cuenta ese día.
+// Despertador y Oración de la mañana no cuentan. La rutina va con sus cambios del día (rutina_dia): moverla se hace ahí, no con una tarea.
 const RUT_SIN_CHOQUE = ['despertar', 'oracion'];
 const RUT_DURACION = {'taekwondo-ninos':60, 'contemplativa':60};
 let choques = new Map(), choquesDia = {};  // id de tarea -> textos con los que choca; fecha -> nº de choques
@@ -598,7 +617,6 @@ function duracionTarea(t){
   if (m && +m[2] > +m[1] && +m[2] <= 24) return (+m[2] - +m[1]) * 60;
   return 60;
 }
-const empiezaPor = (texto, r) => { const x = texto.trim().toLowerCase(); return [r.texto, r.corto].some(n => x.startsWith(n.toLowerCase())); };
 function calcularChoques(){
   choques = new Map(); choquesDia = {};
   const anadir = (id, txt) => choques.set(id, [...(choques.get(id) || []), txt]);
@@ -609,7 +627,7 @@ function calcularChoques(){
       const ini = aMin(t.hora);
       return {id:t.id, ini, fin:ini + duracionTarea(t), tarea:true, txt:horaBonita(t.hora) + ' ' + t.texto};
     });
-    rutinaDe(f).filter(r => !RUT_SIN_CHOQUE.includes(r.id) && !todas.some(t => empiezaPor(t.texto, r))).forEach(r => {
+    rutinaDe(f).filter(r => !RUT_SIN_CHOQUE.includes(r.id)).forEach(r => {
       const ini = aMin(r.hora);
       items.push({ini, fin:ini + (RUT_DURACION[r.id] || 30), tarea:false, txt:r.etiqueta + ' ' + r.texto});
     });
@@ -670,6 +688,7 @@ function chipRutina(fecha, r){
   }
   li.className = 'tarea t-rutina' + (rutinaHecha(fecha, r.id) ? ' hecha' : '');
   li.dataset.rut = r.id; li.dataset.fecha = fecha;
+  if (r.cambio){ li.classList.add('cambiada'); li.title = r.cambio; }
   li.innerHTML = `<button class="chk" title="Hecha"></button><span class="txt">${hora}${r.texto}</span>`;
   return li;
 }
@@ -906,7 +925,7 @@ function pintarSemana(){
     el.querySelector('.mes').textContent = MESES[d.getMonth()];
     el.classList.toggle('hoy', f === hoy);
     el.querySelector('.rutinas').innerHTML = [...rutinaDe(f), ...cumplesDe(f)].map(r => r.marcable
-      ? `<span class="rut${rutinaHecha(f, r.id) ? ' hecha' : ''}" data-rut="${r.id}" data-fecha="${f}" title="${r.texto}"><i></i>${r.etiqueta} ${r.corto}</span>`
+      ? `<span class="rut${rutinaHecha(f, r.id) ? ' hecha' : ''}${r.cambio ? ' cambiada' : ''}" data-rut="${r.id}" data-fecha="${f}" title="${r.texto}${r.cambio ? ' · ' + r.cambio : ''}"><i></i>${r.etiqueta} ${r.corto}</span>`
       : `<span class="rut fija" title="${r.texto}">${r.etiqueta} ${r.corto}</span>`).join('');
     llenar(el.querySelector('.tareas'), tareasDe(f).sort(porHora), true);
   }
