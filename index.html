@@ -124,6 +124,8 @@ button{font:inherit;cursor:pointer}
 .t-personal{background:var(--personal);color:var(--personal-t);box-shadow:0 0 0 1px #cfc6b2, 0 1px 0 rgba(0,0,0,.12)}
 .t-rojo{background:var(--rojo);color:var(--rojo-t);font-weight:700}
 .t-rutina{background:transparent;color:var(--tinta);box-shadow:none;border:1.4px dashed #b9ae95;cursor:pointer;font-style:italic}
+/* super alarma programada (agenda.py alarma): campanita antes del texto */
+.campana{font-size:.85em;margin-right:3px;font-style:normal}
 /* seguimiento: lo lleva otro y Lucas solo lo vigila */
 .tarea.seg{background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,.55) 0 4px, transparent 4px 8px);font-style:italic}
 .tarea.seg .txt::before{content:"👁 ";font-style:normal}
@@ -675,6 +677,7 @@ function chip(t, conHora){
   const txt = li.querySelector('.txt');
   if (choca){ const w = document.createElement('span'); w.className = 'aviso'; w.textContent = '⚠'; txt.appendChild(w); }
   if (conHora && t.hora){ const h = document.createElement('span'); h.className = 'hora'; h.textContent = horaBonita(t.hora); txt.appendChild(h); }
+  if (t.alarma){ const b = document.createElement('span'); b.className = 'campana'; b.textContent = '🔔'; b.title = 'Super alarma a las ' + horaBonita(t.alarma); txt.appendChild(b); }
   txt.append(t.texto);
   return li;
 }
