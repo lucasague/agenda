@@ -754,7 +754,9 @@ function comprimir(ul){
 
 /* ---------- papelitos: temas plegados ---------- */
 // Si no cabe, cada tema se pliega en un papelito (el de más tareas primero) hasta que lo que queda quepa.
-// Primero se pliegan las tareas sin hora; si aún no cabe, también las que tienen hora (de lo que se desborda).
+// Primero se pliegan las hechas; si aún no cabe, las pendientes sin hora. Una pendiente con hora NUNCA se pliega:
+// es la cita del día y tiene que verse en la casilla aunque quede apretada (incidente 21/10/2026: "Mario Vega 12:00"
+// escondida en el papelito de IM porque 26 tareas ya tachadas llenaban la casilla).
 // Lo abierto se recuerda por día y tema ("fecha|tema") para que sobreviva a los repintados.
 let papelesAbiertos = new Set();
 function crearPapel(tema, fecha){
@@ -772,7 +774,8 @@ function cuentaPapel(li){
   const ts = [...li.querySelectorAll('.papel-lista > .tarea')];
   li.querySelector('.cuenta').textContent = `${ts.filter(t => !t.classList.contains('hecha')).length}/${ts.length}`;
 }
-const noTieneHora = li => !li.querySelector('.hora');
+const esHecha = li => li.classList.contains('hecha');
+const pendienteSinHora = li => !esHecha(li) && !li.querySelector('.hora');
 function plegarTemas(ul){
   if (!ul.clientHeight) return;
   const fecha = ul.closest('.dia')?.dataset.fecha || diaActual;
@@ -780,7 +783,7 @@ function plegarTemas(ul){
   const cabe = () => ul.classList.contains('doble') ? ul.children.length <= +ul.dataset.capacidad : !sobra(ul);
   const directas = () => [...ul.querySelectorAll(':scope > .tarea[data-id]')];
   directas().forEach((li, k) => li.dataset.k = k);  // orden original, para reponerlas ordenadas
-  for (const pase of [noTieneHora, () => true]){
+  for (const pase of [esHecha, pendienteSinHora]){
     if (cabe()) break;
     const grupos = new Map();
     directas().filter(pase).forEach(li => {
