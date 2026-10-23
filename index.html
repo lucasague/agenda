@@ -105,6 +105,14 @@ button{font:inherit;cursor:pointer}
   background:repeating-linear-gradient(to bottom, transparent 0 27px, var(--linea) 27px 28px)}
 .tareas::-webkit-scrollbar{width:6px}.tareas::-webkit-scrollbar-thumb{background:var(--papel-sombra);border-radius:3px}
 
+/* desenlace (quien hizo el trabajo declara qué te toca): signo delante + filete fino a la izquierda; ✅ y 👀 sin color */
+.tarea[class*="d-"] .sig{margin-right:3px;font-size:.85em;font-style:normal}
+.tarea.d-parada{box-shadow:inset 2px 0 0 #b5483a;padding-left:5px}
+.tarea.d-toca{box-shadow:inset 2px 0 0 #c9922e;padding-left:5px}
+.tarea.d-supuesto{box-shadow:inset 2px 0 0 #7b9bb8;padding-left:5px}
+.editor .info{white-space:pre-wrap;font-size:13.5px;line-height:1.35;margin:0 0 8px;padding:6px 8px;border-left:3px solid var(--linea);background:rgba(0,0,0,.04);max-height:30vh;overflow:auto}
+.editor .info:empty{display:none}
+
 /* ---------- tarea ---------- */
 .tarea{display:flex;align-items:flex-start;gap:6px;margin:2px 0 3px;padding:2px 8px 2px 5px;border-radius:4px;
   font-size:15px;line-height:1.35;cursor:grab;user-select:none;
@@ -403,6 +411,7 @@ button{font:inherit;cursor:pointer}
 <div class="velo" id="velo">
   <div class="editor">
     <h2 id="edTitulo">Nueva tarea</h2>
+    <div class="info" id="edInfo"></div>
     <textarea id="edTexto" placeholder="Qué hay que hacer…"></textarea>
     <label>Hora <input type="time" id="edHora"> <small>(opcional)</small></label>
     <div class="temas" id="edTemas"></div>
@@ -697,13 +706,33 @@ function pintarAvisos(){
   });
 }
 
+const SIGNO_D = {parada:'🛑', toca:'👉', supuesto:'👌', hecha:'✅', marcha:'👀'};
+const DONDE_D = {pc:'en el PC', movil:'en el móvil', fuera:'fuera de casa'};
+// Desenlace que se ve: hecha a mano o 👌 ya aceptado = hecha normal (sin signo de aviso)
+function desenlaceDe(t){
+  const d = t.desenlace; if (!SIGNO_D[d]) return null;
+  if (t.hecha && d !== 'hecha') return 'hecha';
+  if (d === 'supuesto' && t.supuesto_ok) return 'hecha';
+  return d;
+}
+function infoDesenlace(t){
+  const l = [];
+  if (t.detalle) l.push(t.detalle);
+  if (Array.isArray(t.opciones) && t.opciones.length)
+    l.push(t.opciones.map((o, i) => `${i + 1}. ${o}${t.propongo === i + 1 ? '  ← propongo' : ''}`).join('\n'));
+  if (t.donde) l.push('Te toca ' + (DONDE_D[t.donde] || t.donde));
+  if (t.propuesta && t.propuesta_el && Date.now() - t.propuesta_el < 7 * 864e5) l.push('💡 ' + t.propuesta);
+  return l.join('\n');
+}
+
 function chip(t, conHora){
   const li = document.createElement('li');
   const choca = choques.get(t.id);
   li.className = `tarea t-${t.tema}` + (t.hecha ? ' hecha' : '') + (t.seg ? ' seg' : '') + (t.cita ? ' cita' : '') + (choca ? ' choque' : '');
+  const des = desenlaceDe(t); if (des) li.classList.add('d-' + des);
   li.draggable = true;
   li.dataset.id = t.id;
-  li.title = (choca ? 'Choca con ' + choca.join(' y ') + '\n' : '') + (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '');
+  li.title = (choca ? 'Choca con ' + choca.join(' y ') + '\n' : '') + (t.seg ? 'Seguimiento (lo lleva otro): ' : '') + t.texto + (t.por ? ' · apuntada por ' + t.por : '') + (infoDesenlace(t) ? '\n\n' + infoDesenlace(t) : '');
   li.innerHTML = '<button class="chk" title="Hecha"></button><span class="txt"></span>';
   const txt = li.querySelector('.txt');
   if (choca){ const w = document.createElement('span'); w.className = 'aviso'; w.textContent = '⚠'; txt.appendChild(w); }
@@ -718,6 +747,7 @@ function chip(t, conHora){
     tit.textContent = 'Cita: alguien te espera' + (t.alarma ? ' · super alarma a las ' + horaBonita(t.alarma) : '');
     b.appendChild(tit); txt.appendChild(b);
   } else if (t.alarma){ const b = document.createElement('span'); b.className = 'campana'; b.textContent = '🔔'; b.title = 'Super alarma a las ' + horaBonita(t.alarma); txt.appendChild(b); }
+  if (des){ const g = document.createElement('span'); g.className = 'sig'; g.textContent = SIGNO_D[des]; txt.appendChild(g); }
   txt.append(t.texto);
   return li;
 }
@@ -1121,6 +1151,7 @@ function abrirEditor(tarea, fecha, hora){
   let titulo = 'Editar';
   if (!tarea) titulo = fecha ? `${DIAS[diaSemana(deIso(fecha))]} ${+fecha.slice(8)}` : 'Nota sin día';
   $('#edTitulo').textContent = titulo;
+  $('#edInfo').textContent = tarea ? infoDesenlace(tarea) : '';
   $('#edTexto').value = tarea ? tarea.texto : '';
   $('#edHora').value = tarea ? (tarea.hora || '') : (hora || '');
   $('#edBorrar').style.visibility = tarea ? 'visible' : 'hidden';
@@ -1281,7 +1312,7 @@ if (enlace){
 // Pestaña vieja = cliente viejo que guarda con lógica vieja (21/10/2026: una abierta antes de rutina_dia
 // borró la contemplativa movida). publicar.ps1 pone la versión aquí y en version.txt; si cambia, se recarga
 // sola en cuanto no haya nada a medias (el agenda-datos/proteger-campos repone lo que se pierda mientras).
-const VERSION_WEB = 'e014ebfdb99e';
+const VERSION_WEB = 'b0d0c6980a5e';
 async function mirarVersion(){
   if (VERSION_WEB.startsWith('__') || pendiente || sincronizando || arrastrando || $('#velo').classList.contains('abierto')) return;
   try {
